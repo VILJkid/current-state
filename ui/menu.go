@@ -54,8 +54,17 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 		// Set secondary text color to green as default
 		list.SetSecondaryTextColor(tcell.ColorGreen)
 
-		// Set secondary text for current item only
+		// For handler items (memory, disk, user), call handlers fresh to get latest data
 		currentListItem := listItems[index]
+		switch index {
+		case 1:
+			currentListItem = handlers.MemoryHandler()
+		case 2:
+			currentListItem = handlers.DiskHandler()
+		case 3:
+			currentListItem = handlers.UserHandler()
+		}
+
 		if currentListItem.Err != nil {
 			// Show error modal
 			errorModal := GetOKModal(app, list, currentListItem.Err.Error())
