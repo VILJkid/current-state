@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"time"
 
 	"github.com/VILJkid/current-state/handlers"
@@ -37,8 +38,12 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 		list.AddItem(item.PrimaryText, "", item.Shortcut, item.Action)
 	}
 
+	// Create cancellation context for goroutine lifecycle management
+	ctx, cancel := context.WithCancel(context.Background())
+	_ = cancel // Store for cleanup (prevents unused variable warning)
+
 	// Start dynamic updates for handler items (indices 1, 2)
-	go updateSelectedItem(app, list, listItems)
+	go updateSelectedItem(ctx, app, list, listItems)
 
 	list.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		// Clear all secondary texts first
@@ -78,32 +83,39 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 	return flex
 }
 
-// updateSelectedItem refreshes secondary text for ONLY the currently selected item every 5 seconds
-func updateSelectedItem(app *tview.Application, list *tview.List, listItems []types.ListItem) {
+// updateSelectedItem refreshes secondary text for ONLY the currently selected item every 5 seconds.
+// Respects context cancellation for graceful shutdown.
+func updateSelectedItem(ctx context.Context, app *tview.Application, list *tview.List, listItems []types.ListItem) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		app.QueueUpdateDraw(func() {
-			// Get the currently selected item index
-			currentIndex := list.GetCurrentItem()
+	for {
+		select {
+		case <-ctx.Done():
+			// Graceful shutdown - exit goroutine
+			return
+		case <-ticker.C:
+			app.QueueUpdateDraw(func() {
+				// Get the currently selected item index
+				currentIndex := list.GetCurrentItem()
 
-			// Only update if it's one of the handler items (indices 1, 2)
-			if currentIndex >= 1 && currentIndex < 3 {
-				var freshItem types.ListItem
+				// Only update if it's one of the handler items (indices 1, 2)
+				if currentIndex >= 1 && currentIndex < 3 {
+					var freshItem types.ListItem
 
-				switch currentIndex {
-				case 1:
-					freshItem = handlers.MemoryHandler()
-				case 2:
-					freshItem = handlers.DiskHandler()
+					switch currentIndex {
+					case 1:
+						freshItem = handlers.MemoryHandler()
+					case 2:
+						freshItem = handlers.DiskHandler()
+					}
+
+					// Only update if there's no error
+					if freshItem.Err == nil {
+						list.SetItemText(currentIndex, freshItem.PrimaryText, freshItem.SecondaryText)
+					}
 				}
-
-				// Only update if there's no error
-				if freshItem.Err == nil {
-					list.SetItemText(currentIndex, freshItem.PrimaryText, freshItem.SecondaryText)
-				}
-			}
-		})
+			})
+		}
 	}
 }

@@ -18,7 +18,7 @@ func MemoryHandler() types.ListItem {
 
 	memUsage, err := mem.VirtualMemory()
 	if err != nil {
-		listItem.Err = err
+		listItem.Err = system.SanitizeError(err)
 		return listItem
 	}
 

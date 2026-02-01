@@ -16,7 +16,7 @@ func DiskHandler() types.ListItem {
 
 	diskUsage, err := system.GetDiskUsage("/")
 	if err != nil {
-		listItem.Err = err
+		listItem.Err = system.SanitizeError(err)
 		return listItem
 	}
 
