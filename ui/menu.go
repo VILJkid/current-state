@@ -77,9 +77,17 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 		list.SetItemText(index, currentListItem.PrimaryText, currentListItem.SecondaryText)
 	})
 
-	// Wrap the list in a centered flex container
+	// Create title text box with dynamic colors
+	titleBox := CreateColoredTextView(BuildTitleText())
+
+	// Create help footer text box with dynamic colors
+	helpBox := CreateColoredTextView(BuildHelpboxText())
+
+	// Wrap the list in a centered flex container with title and footer
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
+		AddItem(tview.NewBox(), 1, 0, false). // Top spacer (1 line)
+		AddItem(titleBox, 1, 0, false).       // Title (1 line)
 		AddItem(tview.NewBox(), 0, 1, false). // Top spacer
 		AddItem(tview.NewFlex().
 			SetDirection(tview.FlexColumn).
@@ -87,7 +95,8 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 			AddItem(list, 0, 1, true).            // Your list
 			AddItem(tview.NewBox(), 0, 1, false), // Right spacer
 							0, 1, true).
-		AddItem(tview.NewBox(), 0, 1, false) // Bottom spacer
+		AddItem(tview.NewBox(), 0, 1, false). // Bottom spacer
+		AddItem(helpBox, 1, 0, false)         // Footer (1 line)
 
 	return flex
 }
