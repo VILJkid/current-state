@@ -9,7 +9,7 @@ import (
 
 func DiskHandler() types.ListItem {
 	listItem := types.ListItem{
-		PrimaryText:   "Get disk usage",
+		PrimaryText:   "Disk",
 		SecondaryText: "No disk usage information available",
 		Shortcut:      'b',
 	}

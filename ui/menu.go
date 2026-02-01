@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/VILJkid/current-state/handlers"
@@ -13,6 +14,12 @@ import (
 
 func CreateMenu(app *tview.Application) tview.Primitive {
 	list := tview.NewList()
+	// Default secondary text color for unselected items (cyan)
+	list.SetSecondaryTextColor(tcell.ColorDarkCyan)
+	// Selected item text color (black)
+	list.SetSelectedTextColor(tcell.ColorBlack)
+
+	// (wrapping handled by TextView's word wrap)
 
 	listItems := []types.ListItem{
 		handlers.MemoryHandler(),
@@ -29,33 +36,67 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 		},
 	}
 
-	for _, item := range listItems {
-		list.AddItem(item.PrimaryText, "", item.Shortcut, item.Action)
+	// Persistent descriptions for each menu item (shown when not selected)
+	descs := []string{
+		"View memory usage",
+		"Check disk space",
+		"Show current user",
+		"Quit application",
+	}
+
+	for i, item := range listItems {
+		sec := ""
+		if i < len(descs) {
+			sec = descs[i]
+		}
+		list.AddItem(item.PrimaryText, sec, item.Shortcut, item.Action)
+	}
+
+	// Ensure consistent colors for list items
+	list.SetMainTextColor(tcell.ColorWhite)
+	list.SetSecondaryTextColor(tcell.ColorDarkCyan) // cyan for unselected secondary
+	list.SetSelectedTextColor(tcell.ColorBlack)     // black for selected primary
+	// Try to set selected secondary color (may not exist on all tview versions)
+	if setter, ok := any(list).(interface{ SetSelectedSecondaryTextColor(tcell.Color) *tview.List }); ok {
+		setter.SetSelectedSecondaryTextColor(tcell.ColorDarkMagenta)
 	}
 
 	// Auto-select Memory item on startup (index 0) and display data immediately
 	list.SetCurrentItem(0)
-	// Manually trigger data fetch for the selected item
+
+	// Details panel (right side) for multiline output
+	detailsView := tview.NewTextView()
+	detailsView.SetWrap(true)
+	detailsView.SetWordWrap(true)
+	detailsView.SetDynamicColors(true)
+	detailsView.SetBorder(true)
+	detailsView.SetTitle("Details")
+
+	// Manually trigger data fetch for the selected item and populate details
 	memoryItem := handlers.MemoryHandler()
 	if memoryItem.Err == nil {
 		list.SetItemText(0, memoryItem.PrimaryText, memoryItem.SecondaryText)
+		detailsView.SetText(memoryItem.SecondaryText)
 	}
 
 	// Create cancellation context for goroutine lifecycle management
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = cancel // Store for cleanup (prevents unused variable warning)
 
-	// Start dynamic updates for handler items (indices 1, 2)
-	go updateSelectedItem(ctx, app, list, listItems)
+	// Start dynamic updates for handler items (indices 0, 1)
+	go updateSelectedItem(ctx, app, list, listItems, detailsView)
+
+	// Track previous selected index so we can restore its persistent description
+	prevIndex := 0
 
 	list.SetChangedFunc(func(index int, _, _ string, _ rune) {
-		// Clear all secondary texts first
-		for i, listItem := range listItems {
-			list.SetItemText(i, listItem.PrimaryText, "")
+		// Restore previous item's persistent description
+		if prevIndex >= 0 && prevIndex < len(listItems) {
+			list.SetItemText(prevIndex, listItems[prevIndex].PrimaryText, descs[prevIndex])
 		}
 
-		// Set secondary text color to green as default
-		list.SetSecondaryTextColor(tcell.ColorGreen)
+		// Ensure unselected items keep the cyan secondary color
+		list.SetSecondaryTextColor(tcell.ColorDarkCyan)
 
 		// For handler items (memory, disk, user), call handlers fresh to get latest data
 		currentListItem := listItems[index]
@@ -73,11 +114,20 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 			errorModal := GetOKModal(app, list, currentListItem.Err.Error())
 			app.SetRoot(errorModal, false)
 
-			// Set secondary text color to red
+			// On error, set secondary text to red so user notices
 			list.SetSecondaryTextColor(tcell.ColorRed)
+
+			// Update previous index and return early
+			prevIndex = index
+			return
 		}
 
+		// Update the selected item's list entry and details panel
 		list.SetItemText(index, currentListItem.PrimaryText, currentListItem.SecondaryText)
+		detailsView.SetText(currentListItem.SecondaryText)
+
+		// Update previous index
+		prevIndex = index
 	})
 
 	// Create title text box with dynamic colors
@@ -86,28 +136,55 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 	// Create help footer text box with dynamic colors
 	helpBox := CreateColoredTextView(BuildHelpboxText())
 
-	// Wrap the list in a centered flex container with title and footer
+	// Wrap the list and details in a centered flex container with title and footer
+	cols := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(list, 0, LeftColumnWeight, true).
+		AddItem(detailsView, 0, RightColumnWeight, false)
+
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(tview.NewBox(), 1, 0, false). // Top spacer (1 line)
-		AddItem(titleBox, 1, 0, false).       // Title (1 line)
-		AddItem(tview.NewBox(), 0, 1, false). // Top spacer
-		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexColumn).
-			AddItem(tview.NewBox(), 0, 1, false). // Left spacer
-			AddItem(list, 0, 1, true).            // Your list
-			AddItem(tview.NewBox(), 0, 1, false), // Right spacer
-							0, 1, true).
-		AddItem(tview.NewBox(), 0, 1, false). // Bottom spacer
-		AddItem(helpBox, 1, 0, false)         // Footer (1 line)
+		AddItem(tview.NewBox(), TopSpacerHeight, 0, false). // Top spacer
+		AddItem(titleBox, TitleHeight, 0, false).           // Title
+		AddItem(tview.NewBox(), 0, 1, false).               // Middle spacer (proportional)
+		AddItem(cols, 0, 1, true).
+		AddItem(tview.NewBox(), 0, 1, false).    // Bottom spacer
+		AddItem(helpBox, FooterHeight, 0, false) // Footer
+
+	// Live resize check: show warning modal if terminal too narrow
+	modalShown := false
+	app.SetAfterDrawFunc(func(screen tcell.Screen) {
+		w, _ := screen.Size()
+		if w < MinTerminalWidth && !modalShown {
+			warning := fmt.Sprintf("Terminal width %d too small to display full UI (need >= %d columns). Resize terminal or press OK.", w, MinTerminalWidth)
+			modal := GetOKModal(app, flex, warning)
+			// Override modal done func so we can reset the shown flag and return to flex
+			modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+				app.SetRoot(flex, true)
+				modalShown = false
+			})
+			app.QueueUpdateDraw(func() {
+				app.SetRoot(modal, true)
+			})
+			modalShown = true
+			return
+		}
+		// If terminal is wide enough and modal was previously shown, restore root
+		if w >= MinTerminalWidth && modalShown {
+			app.QueueUpdateDraw(func() {
+				app.SetRoot(flex, true)
+			})
+			modalShown = false
+		}
+	})
 
 	return flex
 }
 
 // updateSelectedItem refreshes secondary text for ONLY the currently selected item every 5 seconds.
 // Respects context cancellation for graceful shutdown.
-func updateSelectedItem(ctx context.Context, app *tview.Application, list *tview.List, listItems []types.ListItem) {
-	ticker := time.NewTicker(5 * time.Second)
+func updateSelectedItem(ctx context.Context, app *tview.Application, list *tview.List, listItems []types.ListItem, detailsView *tview.TextView) {
+	ticker := time.NewTicker(RefreshInterval)
 	defer ticker.Stop()
 
 	for {
@@ -134,6 +211,8 @@ func updateSelectedItem(ctx context.Context, app *tview.Application, list *tview
 					// Only update if there's no error
 					if freshItem.Err == nil {
 						list.SetItemText(currentIndex, freshItem.PrimaryText, freshItem.SecondaryText)
+						// update details panel as well
+						detailsView.SetText(freshItem.SecondaryText)
 					}
 				}
 			})

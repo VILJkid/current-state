@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -62,6 +64,8 @@ func BuildHelpboxText() string {
 		}
 	}
 
+	// Append current layout weights for easy tuning visibility
+	text += fmt.Sprintf("  [white]| Layout:%d:%d", LeftColumnWeight, RightColumnWeight)
 	return text
 }
 

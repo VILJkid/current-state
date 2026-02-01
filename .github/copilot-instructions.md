@@ -122,12 +122,44 @@ The modal system handles user-visible errors and confirmations:
 - **UI → Handlers**: Menu queries handlers on selection change to display secondary text
 - **System → types**: Handlers format raw system data into `ListItem` and `DiskStatus` structs
 
+## UI Configuration & Styling
+
+### Layout Configuration (`ui/config.go`)
+All layout constants are centralized for easy tuning:
+```go
+MinTerminalWidth = 80              // Minimal comfortable terminal width
+LeftColumnWeight = 1               // List column weight ratio
+RightColumnWeight = 2              // Details panel column weight ratio
+TitleHeight = 1                    // Title box height in rows
+FooterHeight = 1                   // Help footer height in rows
+TopSpacerHeight = 1                // Top spacer height
+RefreshInterval = 5 * time.Second  // Handler data refresh rate
+```
+- Adjust `MinTerminalWidth` to change resize warning threshold
+- Modify column weights to balance list vs. details panel
+- Change `RefreshInterval` to control how often memory/disk data updates
+
+### Color Scheme (`ui/menu.go`)
+Color mapping for list items (via tview List API):
+- **Default primary text**: White (`tcell.ColorWhite`)
+- **Default secondary text**: Cyan (`0x00FFFF`)
+- **Selected primary text**: Black (`tcell.ColorBlack`)
+- **Selected secondary text**: Magenta (`0xFF00FF`)
+- **Error secondary text**: Red (`tcell.ColorRed`) — set when handler returns error
+
+### UI Components
+- **Title Box**: Displays app name and version using colored text tags (`BuildTitleText()`)
+- **Help Footer**: Shows keyboard shortcuts and layout info via `BuildHelpboxText()`
+- **Details Panel**: Right-side TextView showing multiline handler output with word-wrap enabled
+- **Resize Warning Modal**: Appears when terminal width < `MinTerminalWidth`; user can dismiss or resize
+
 ## Development Notes
 
 - **Platform-specific code**: Disk usage uses `syscall.Statfs` (Unix) - avoid gopsutil when syscall suffices
 - **UI thread safety**: Always queue updates via `app.QueueUpdateDraw()` when modifying UI from goroutines
 - **Error propagation**: Handlers never panic; return errors in `ListItem.Err` for modal display
 - **Testing patterns**: System functions are pure (no side effects) - unit tests easy to add in `pkg/system/`
+- **Adding new menu items**: Add handler to `handlers/`, include in `listItems` slice in `CreateMenu()`, update `descs[]` with persistent description, and update `BuildHelpboxText()` in `ui/styling.go` with new shortcut
 
 ## Security Architecture
 
@@ -163,3 +195,51 @@ app.SetDoneFunc(func() {
 - Prevents goroutine leaks on app termination
 - Allows graceful shutdown of long-running operations
 - Standard Go idiom for cancellation
+
+## Future Work / TODO
+
+### 1. Add Visual Title & Help Footer [Partial]
+- [x] Add app title with version/date
+- [x] Show keyboard shortcuts in a help footer (e.g., "Press 'a' for memory, 'b' for disk, 'q' to quit")
+- [x] Makes it clear what's available without trial-and-error
+
+**Next**: Consider adding version and date dynamically (from build flags or config)
+
+### 2. Improve Menu Item Text [Done]
+- [x] Make the first item ("Select an item...") less prominent or auto-skip it
+- [x] Add actual descriptions next to shortcuts in secondary text
+
+**Completed**: Auto-select Memory on startup, persistent descriptions displayed for unselected items.
+
+### 3. Add Navigation Feedback [Pending]
+- [ ] Show current selection indicator visually (e.g., "Item 1/4")
+- [ ] Display item count in title or status bar
+- [ ] Add search/filter capability with '/' key
+
+**Suggested approach**: Add item counter in title or create a status panel; use tview's event handling for '/' key to toggle search mode.
+
+### 4. Better Error Handling [Partial]
+- [ ] Show retries for errors ("Retry" button in error modal)
+- [ ] Add error recovery hint ("Press Enter to refresh")
+
+**Suggested approach**: Update `GetOKModal()` to accept optional "Retry" button; add a key binding in menu for manual refresh.
+
+### 5. Visual Improvements [In Progress]
+- [x] Add borders and styling with `SetBorder(true)` and `SetTitle()`
+- [ ] Use colors more strategically (warn colors for high memory/disk usage)
+
+**Next**: Implement threshold-based colors (e.g., show yellow/red if memory usage > 80%, disk > 90%).
+
+### 6. Status Panel [Pending]
+- [ ] Add a separate status panel showing:
+  - Current time
+  - CPU usage
+  - Overall system health indicator
+
+**Suggested approach**: Add new handler `CPUHandler()` and `TimeHandler()` in `handlers/`; create a status bar above the main list or integrate into details panel.
+
+### 7. Auto-Selection on Start [Done]
+- [x] Automatically select the first real data item (Memory) on launch
+- [x] Show data immediately instead of "Select an item"
+
+**Completed**: Memory item is auto-selected at startup with live data fetch; details panel updates immediately.
