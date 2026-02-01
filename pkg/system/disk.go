@@ -7,6 +7,11 @@ import (
 )
 
 func GetDiskUsage(path string) (*types.DiskStatus, error) {
+	// Validate path against whitelist
+	if err := ValidatePath(path); err != nil {
+		return nil, err
+	}
+
 	fs := syscall.Statfs_t{}
 	if err := syscall.Statfs(path, &fs); err != nil {
 		return nil, err
