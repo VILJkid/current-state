@@ -11,7 +11,7 @@ import (
 
 func MemoryHandler() types.ListItem {
 	listItem := types.ListItem{
-		PrimaryText:   "Get memory usage",
+		PrimaryText:   "Memory",
 		SecondaryText: "No memory usage information available",
 		Shortcut:      'a',
 	}

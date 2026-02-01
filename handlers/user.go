@@ -11,7 +11,7 @@ func UserHandler() types.ListItem {
 	user, err := system.GetCurrentUser()
 	sanitizedErr := system.SanitizeError(err)
 	return types.ListItem{
-		PrimaryText:   "Get the current logged in user",
+		PrimaryText:   "User",
 		SecondaryText: fmt.Sprintf("Current user: %s", user),
 		Shortcut:      'c',
 		Err:           sanitizedErr,
