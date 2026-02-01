@@ -15,11 +15,6 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 	list := tview.NewList()
 
 	listItems := []types.ListItem{
-		{
-			PrimaryText: "Select an item from below...",
-			Shortcut:    'm',
-			Err:         nil,
-		},
 		handlers.MemoryHandler(),
 		handlers.DiskHandler(),
 		handlers.UserHandler(),
@@ -36,6 +31,14 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 
 	for _, item := range listItems {
 		list.AddItem(item.PrimaryText, "", item.Shortcut, item.Action)
+	}
+
+	// Auto-select Memory item on startup (index 0) and display data immediately
+	list.SetCurrentItem(0)
+	// Manually trigger data fetch for the selected item
+	memoryItem := handlers.MemoryHandler()
+	if memoryItem.Err == nil {
+		list.SetItemText(0, memoryItem.PrimaryText, memoryItem.SecondaryText)
 	}
 
 	// Create cancellation context for goroutine lifecycle management
@@ -57,11 +60,11 @@ func CreateMenu(app *tview.Application) tview.Primitive {
 		// For handler items (memory, disk, user), call handlers fresh to get latest data
 		currentListItem := listItems[index]
 		switch index {
-		case 1:
+		case 0:
 			currentListItem = handlers.MemoryHandler()
-		case 2:
+		case 1:
 			currentListItem = handlers.DiskHandler()
-		case 3:
+		case 2:
 			currentListItem = handlers.UserHandler()
 		}
 
@@ -117,14 +120,14 @@ func updateSelectedItem(ctx context.Context, app *tview.Application, list *tview
 				// Get the currently selected item index
 				currentIndex := list.GetCurrentItem()
 
-				// Only update if it's one of the handler items (indices 1, 2)
-				if currentIndex >= 1 && currentIndex < 3 {
+				// Only update if it's one of the handler items (indices 0, 1)
+				if currentIndex >= 0 && currentIndex < 2 {
 					var freshItem types.ListItem
 
 					switch currentIndex {
-					case 1:
+					case 0:
 						freshItem = handlers.MemoryHandler()
-					case 2:
+					case 1:
 						freshItem = handlers.DiskHandler()
 					}
 
